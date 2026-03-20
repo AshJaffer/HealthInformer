@@ -1,0 +1,8 @@
+.env
+__pycache__/
+*.pyc
+data/raw/
+vectorstore/chroma_db/
+evaluation/results/*.csv
+evaluation/results/*.png
+.ipynb_checkpoints/

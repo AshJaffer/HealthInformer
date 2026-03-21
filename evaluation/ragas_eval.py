@@ -22,8 +22,11 @@ import time
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
+from langchain_core.embeddings import Embeddings
 from ragas import EvaluationDataset, SingleTurnSample, evaluate
+from ragas.embeddings import LangchainEmbeddingsWrapper
 from ragas.llms import LangchainLLMWrapper
 from ragas.metrics import (
     _AnswerRelevancy,
@@ -35,6 +38,27 @@ from ragas.metrics import (
 from config.settings import EVAL_RESULTS_DIR, GROQ_API_KEY
 from evaluation.test_questions import TEST_QUESTIONS
 from pipeline.rag_chain import RAGChain
+
+
+class _PubMedBERTEmbeddings(Embeddings):
+    """Langchain-compatible wrapper around our PubMedBERT embedder.
+
+    RAGAS AnswerRelevancy needs an embeddings model. Rather than
+    defaulting to OpenAI, we reuse the same PubMedBERT model from
+    our vectorstore — keeping everything local and free.
+    """
+
+    def __init__(self) -> None:
+        from vectorstore.embedder import Embedder
+        self._embedder = Embedder()
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        vecs = self._embedder.embed_batch(texts, show_progress=False)
+        return vecs.tolist()
+
+    def embed_query(self, text: str) -> list[float]:
+        vec = self._embedder.embed(text)
+        return vec.tolist()
 
 
 def _get_evaluator_llm(evaluator: str = "groq") -> LangchainLLMWrapper:
@@ -60,6 +84,11 @@ def _get_evaluator_llm(evaluator: str = "groq") -> LangchainLLMWrapper:
         raise ValueError(f"Unknown evaluator: {evaluator!r}")
 
     return LangchainLLMWrapper(llm)
+
+
+def _get_evaluator_embeddings() -> LangchainEmbeddingsWrapper:
+    """Create a RAGAS-compatible embeddings wrapper using PubMedBERT."""
+    return LangchainEmbeddingsWrapper(_PubMedBERTEmbeddings())
 
 
 def run_ragas_evaluation(
@@ -111,18 +140,23 @@ def run_ragas_evaluation(
     # ── Run RAGAS evaluation ────────────────────────────────────────────
     print(f"\nRunning RAGAS metrics (evaluator={evaluator})...")
     eval_llm = _get_evaluator_llm(evaluator)
+    eval_embeddings = _get_evaluator_embeddings()
 
     metrics = [
-        _Faithfulness(llm=eval_llm),
-        _AnswerRelevancy(llm=eval_llm),
-        _LLMContextPrecisionWithReference(llm=eval_llm),
-        _LLMContextRecall(llm=eval_llm),
+        _Faithfulness(),
+        _AnswerRelevancy(),
+        _LLMContextPrecisionWithReference(),
+        _LLMContextRecall(),
     ]
 
     dataset = EvaluationDataset(samples=samples)
+    # Pass llm and embeddings at the top level so RAGAS uses Groq + PubMedBERT
+    # for ALL metrics, instead of falling back to OpenAI defaults.
     eval_result = evaluate(
         dataset=dataset,
         metrics=metrics,
+        llm=eval_llm,
+        embeddings=eval_embeddings,
         raise_exceptions=False,
         show_progress=True,
     )

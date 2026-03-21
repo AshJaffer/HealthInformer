@@ -1,13 +1,20 @@
 """Entry point: run all evaluations and print a final summary table.
 
+Supports split-phase workflow to work within Groq free-tier rate limits:
+  1. --generate-only: run RAG chain, save answers to JSON (uses generator tokens)
+  2. --evaluate-only: load saved JSON, score with RAGAS (uses evaluator tokens)
+
+This lets you generate with Groq (free) and evaluate with Bedrock (no rate limit).
+
 Usage:
-    python run_eval.py                          # Run all evals with groq
-    python run_eval.py --model bedrock          # Use Bedrock for generation
-    python run_eval.py --ragas-only             # Only RAGAS metrics
-    python run_eval.py --pubmedqa-only          # Only PubMedQA benchmark
-    python run_eval.py --spot-check-only        # Only spot check
-    python run_eval.py --evaluator bedrock      # Use Bedrock as RAGAS judge
-    python run_eval.py --pubmedqa-max 100       # Limit PubMedQA questions
+    python run_eval.py                                    # All-in-one (generate + evaluate)
+    python run_eval.py --generate-only --model groq       # Generate only, save JSON
+    python run_eval.py --generate-only --model bedrock    # Generate with Bedrock
+    python run_eval.py --evaluate-only --evaluator bedrock  # Score saved results
+    python run_eval.py --ragas-only                       # RAGAS only (all-in-one)
+    python run_eval.py --model groq --top-k 4             # Override retrieval depth
+    python run_eval.py --pubmedqa-only                    # Only PubMedQA benchmark
+    python run_eval.py --spot-check-only                  # Only spot check
 """
 
 import argparse
@@ -23,8 +30,10 @@ THRESHOLDS: dict[str, tuple[str, float]] = {
     "faithfulness":     ("RAGAS Faithfulness",           0.8),
     "answer_relevancy": ("RAGAS Answer Relevancy",       0.7),
     "context_precision": ("RAGAS Context Precision",     0.7),
+    "llm_context_precision_with_reference": ("RAGAS Context Precision", 0.7),
     "LLMContextPrecisionWithReference": ("RAGAS Context Precision", 0.7),
     "context_recall":   ("RAGAS Context Recall",         0.6),
+    "llm_context_recall": ("RAGAS Context Recall",       0.6),
     "LLMContextRecall": ("RAGAS Context Recall",         0.6),
 }
 
@@ -36,11 +45,13 @@ def _print_threshold_table(ragas_df: pd.DataFrame | None, pubmedqa_df: pd.DataFr
     print(f"{'-'*70}")
 
     if ragas_df is not None and not ragas_df.empty:
+        seen_labels: set[str] = set()
         for col, (label, target) in THRESHOLDS.items():
-            if col in ragas_df.columns:
+            if col in ragas_df.columns and label not in seen_labels:
                 val = ragas_df[col].mean()
                 status = "PASS" if val >= target else "MISS"
                 print(f"  {label:<38} {val:>7.3f} {target:>7.1f}  {'  ' + status}")
+                seen_labels.add(label)
 
         # Latency
         avg_lat = ragas_df["latency_sec"].mean()
@@ -58,8 +69,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run HealthInformer evaluations")
     parser.add_argument("--model", type=str, default="groq", choices=["groq", "bedrock"],
                         help="LLM backend for answer generation (default: groq)")
-    parser.add_argument("--evaluator", type=str, default="groq", choices=["groq", "bedrock"],
-                        help="LLM backend for RAGAS evaluation (default: groq)")
+    parser.add_argument("--evaluator", type=str, default="bedrock", choices=["groq", "bedrock"],
+                        help="LLM backend for RAGAS evaluation (default: bedrock)")
+    parser.add_argument("--top-k", type=int, default=4,
+                        help="Number of chunks to retrieve per question (default: 4)")
+
+    # Phase flags
+    parser.add_argument("--generate-only", action="store_true",
+                        help="Generate answers and save to JSON (no scoring)")
+    parser.add_argument("--evaluate-only", action="store_true",
+                        help="Score previously generated answers (no generation)")
+
+    # Eval-type flags
     parser.add_argument("--ragas-only", action="store_true",
                         help="Run only RAGAS evaluation")
     parser.add_argument("--pubmedqa-only", action="store_true",
@@ -72,9 +93,14 @@ def main() -> None:
                         help="Spot check sample size (default: 50)")
     args = parser.parse_args()
 
+    if args.generate_only and args.evaluate_only:
+        print("ERROR: Cannot use --generate-only and --evaluate-only together.")
+        sys.exit(1)
+
     # Determine which evals to run
-    run_all = not (args.ragas_only or args.pubmedqa_only or args.spot_check_only)
-    run_ragas = run_all or args.ragas_only
+    run_all = not (args.ragas_only or args.pubmedqa_only or args.spot_check_only
+                   or args.generate_only or args.evaluate_only)
+    run_ragas = run_all or args.ragas_only or args.generate_only or args.evaluate_only
     run_pubmedqa = run_all or args.pubmedqa_only
     run_spot = run_all or args.spot_check_only
 
@@ -84,16 +110,39 @@ def main() -> None:
 
     # ── RAGAS ───────────────────────────────────────────────────────────
     if run_ragas:
-        print("\n" + "="*60)
-        print("RUNNING RAGAS EVALUATION")
-        print("="*60)
-        from evaluation.ragas_eval import run_ragas_evaluation
-        try:
-            ragas_df = run_ragas_evaluation(
-                model=args.model, evaluator=args.evaluator,
-            )
-        except Exception as e:
-            print(f"RAGAS evaluation failed: {e}")
+        from evaluation.ragas_eval import generate_answers, score_answers, run_ragas_evaluation
+
+        if args.generate_only:
+            # Phase 1 only: generate and save
+            print("\n" + "="*60)
+            print("GENERATING ANSWERS (no scoring)")
+            print("="*60)
+            try:
+                generate_answers(model=args.model, top_k=args.top_k)
+            except Exception as e:
+                print(f"Generation failed: {e}")
+
+        elif args.evaluate_only:
+            # Phase 2 only: load and score
+            print("\n" + "="*60)
+            print("SCORING SAVED ANSWERS (no generation)")
+            print("="*60)
+            try:
+                ragas_df = score_answers(model=args.model, evaluator=args.evaluator)
+            except Exception as e:
+                print(f"Evaluation failed: {e}")
+
+        else:
+            # All-in-one
+            print("\n" + "="*60)
+            print("RUNNING RAGAS EVALUATION")
+            print("="*60)
+            try:
+                ragas_df = run_ragas_evaluation(
+                    model=args.model, evaluator=args.evaluator, top_k=args.top_k,
+                )
+            except Exception as e:
+                print(f"RAGAS evaluation failed: {e}")
 
     # ── PubMedQA ────────────────────────────────────────────────────────
     if run_pubmedqa:
@@ -122,7 +171,8 @@ def main() -> None:
             print(f"Spot check failed: {e}")
 
     # ── Final summary ───────────────────────────────────────────────────
-    _print_threshold_table(ragas_df, pubmedqa_df)
+    if not args.generate_only:
+        _print_threshold_table(ragas_df, pubmedqa_df)
 
 
 if __name__ == "__main__":

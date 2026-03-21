@@ -1,24 +1,33 @@
 """RAGAS evaluation: faithfulness, answer relevancy, context precision/recall.
 
-Runs each test question through the RAG chain, collects the
-question/answer/contexts/ground_truth triples, and feeds them to RAGAS.
-Results are saved as CSV to evaluation/results/.
+Supports two modes:
+  1. generate_answers() — runs the RAG chain, saves results to JSON.
+  2. score_answers()    — loads saved JSON, runs RAGAS metrics.
+
+This separation lets you use Groq for generation and Bedrock for evaluation,
+avoiding the Groq free-tier rate limit (100K tokens/day) bottleneck.
 
 METHODOLOGICAL NOTE — Evaluation circularity:
     When the evaluator LLM is from the same family as the generator LLM
     (e.g., both are Llama 3 via Groq), the evaluation may be biased —
-    the model is effectively grading its own work. This is a known
-    limitation of LLM-as-judge approaches. For a rigorous comparison,
-    use a *different* model family as evaluator (e.g., evaluate Groq
-    generations with a Bedrock evaluator, and vice versa). We flag this
-    in the report and present results with appropriate caveats.
+    the model is effectively grading its own work. Using a *different*
+    model family as evaluator (e.g., Bedrock Claude for evaluation)
+    mitigates this. We flag this in the report.
 
 Usage:
-    from evaluation.ragas_eval import run_ragas_evaluation
-    results_df = run_ragas_evaluation(model="groq", evaluator="groq")
+    # Generate answers (uses Groq tokens only)
+    generate_answers(model="groq", top_k=4)
+
+    # Score saved answers (uses Bedrock tokens only)
+    df = score_answers(model="groq", evaluator="bedrock")
+
+    # All-in-one (original behavior)
+    df = run_ragas_evaluation(model="groq", evaluator="bedrock", top_k=4)
 """
 
+import json
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -35,7 +44,7 @@ from ragas.metrics import (
     _LLMContextRecall,
 )
 
-from config.settings import EVAL_RESULTS_DIR, GROQ_API_KEY
+from config.settings import EVAL_RESULTS_DIR, GROQ_API_KEY, BEDROCK_MODEL_ID, AWS_REGION
 from evaluation.test_questions import TEST_QUESTIONS
 from pipeline.rag_chain import RAGChain
 
@@ -61,11 +70,11 @@ class _PubMedBERTEmbeddings(Embeddings):
         return vec.tolist()
 
 
-def _get_evaluator_llm(evaluator: str = "groq") -> LangchainLLMWrapper:
+def _get_evaluator_llm(evaluator: str = "bedrock") -> LangchainLLMWrapper:
     """Create a RAGAS-compatible LLM wrapper for the evaluator.
 
     Args:
-        evaluator: "groq" or "bedrock". Defaults to groq (free).
+        evaluator: "groq" or "bedrock". Defaults to bedrock.
     """
     if evaluator == "groq":
         from langchain_groq import ChatGroq
@@ -73,12 +82,16 @@ def _get_evaluator_llm(evaluator: str = "groq") -> LangchainLLMWrapper:
             model="llama-3.3-70b-versatile",
             api_key=GROQ_API_KEY,
             temperature=0.0,
+            timeout=120,
+            max_retries=3,
         )
     elif evaluator == "bedrock":
-        from langchain_aws import ChatBedrock
-        llm = ChatBedrock(
-            model_id="us.anthropic.claude-3-5-sonnet-20241022-v2:0",
-            region_name="us-east-1",
+        from langchain_aws import ChatBedrockConverse
+        llm = ChatBedrockConverse(
+            model=BEDROCK_MODEL_ID,
+            region_name=AWS_REGION,
+            temperature=0.0,
+            max_tokens=2048,
         )
     else:
         raise ValueError(f"Unknown evaluator: {evaluator!r}")
@@ -91,67 +104,131 @@ def _get_evaluator_embeddings() -> LangchainEmbeddingsWrapper:
     return LangchainEmbeddingsWrapper(_PubMedBERTEmbeddings())
 
 
-def run_ragas_evaluation(
+def _generation_path(model: str) -> Path:
+    """Standard path for saved generation JSON."""
+    return EVAL_RESULTS_DIR / f"generated_{model}.json"
+
+
+def generate_answers(
     model: str = "groq",
-    evaluator: str = "groq",
+    top_k: int = 4,
     questions: list[tuple[str, str, str]] | None = None,
-) -> pd.DataFrame:
-    """Run RAGAS evaluation on the test question set.
+) -> Path:
+    """Run the RAG chain on test questions and save results to JSON.
 
     Args:
-        model: RAG chain LLM backend ("groq" or "bedrock").
-        evaluator: LLM to use as RAGAS judge ("groq" or "bedrock").
+        model: LLM backend for generation ("groq" or "bedrock").
+        top_k: Number of chunks to retrieve per query.
         questions: Override test questions. Defaults to TEST_QUESTIONS.
 
     Returns:
-        DataFrame with per-question RAGAS scores.
+        Path to the saved JSON file.
     """
     questions = questions or TEST_QUESTIONS
-    chain = RAGChain(model=model)
+    chain = RAGChain(model=model, top_k=top_k)
 
-    # ── Run each question through the RAG chain ─────────────────────────
-    samples: list[SingleTurnSample] = []
-    timings: list[float] = []
+    results: list[dict[str, Any]] = []
+    print(f"\nGenerating answers for {len(questions)} questions (model={model}, top_k={top_k})...")
 
-    print(f"\nRunning {len(questions)} questions through RAG chain (model={model})...")
     for i, (question, category, ground_truth) in enumerate(questions, 1):
         print(f"  [{i}/{len(questions)}] {question[:60]}...")
         start = time.time()
         try:
             result = chain.ask(question)
             elapsed = time.time() - start
-            timings.append(elapsed)
-
-            sample = SingleTurnSample(
-                user_input=question,
-                response=result["answer"],
-                retrieved_contexts=result["contexts"],
-                reference=ground_truth,
-            )
-            samples.append(sample)
+            results.append({
+                "question": question,
+                "category": category,
+                "ground_truth": ground_truth,
+                "answer": result["answer"],
+                "contexts": result["contexts"],
+                "latency_sec": round(elapsed, 3),
+            })
+            print(f"    OK ({elapsed:.1f}s)")
         except Exception as e:
-            print(f"    ERROR: {e}")
-            timings.append(0.0)
+            error_msg = str(e)
+            print(f"    ERROR: {error_msg}")
+            # Stop early on rate limit — remaining questions will all fail too
+            if "rate_limit" in error_msg.lower() or "429" in error_msg:
+                print(f"\n  Rate limit hit after {len(results)} questions. Saving partial results.")
+                break
 
-    if not samples:
-        print("No successful samples. Cannot run RAGAS.")
+    # Save to JSON
+    EVAL_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    output = {
+        "model": model,
+        "top_k": top_k,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "total_questions": len(questions),
+        "successful": len(results),
+        "results": results,
+    }
+    output_path = _generation_path(model)
+    output_path.write_text(json.dumps(output, indent=2))
+    print(f"\nGenerated answers saved to {output_path}")
+    print(f"  {len(results)}/{len(questions)} questions succeeded")
+    return output_path
+
+
+def score_answers(
+    model: str = "groq",
+    evaluator: str = "bedrock",
+    generation_path: Path | None = None,
+) -> pd.DataFrame:
+    """Load saved generation results and run RAGAS scoring.
+
+    Args:
+        model: Which model's generations to load (used for file naming).
+        evaluator: LLM to use as RAGAS judge ("groq" or "bedrock").
+        generation_path: Override path to generation JSON. Defaults to
+            evaluation/results/generated_{model}.json.
+
+    Returns:
+        DataFrame with per-question RAGAS scores.
+    """
+    path = generation_path or _generation_path(model)
+    if not path.exists():
+        print(f"ERROR: No generation file found at {path}")
+        print(f"  Run with --generate-only first: python run_eval.py --generate-only --model {model}")
         return pd.DataFrame()
 
-    # ── Run RAGAS evaluation ────────────────────────────────────────────
+    print(f"\nLoading generated answers from {path}...")
+    data = json.loads(path.read_text())
+    gen_results = data["results"]
+    gen_model = data["model"]
+    gen_top_k = data["top_k"]
+
+    print(f"  Model: {gen_model}, Top-K: {gen_top_k}, Questions: {len(gen_results)}")
+
+    # Build RAGAS samples
+    samples: list[SingleTurnSample] = []
+    for entry in gen_results:
+        samples.append(SingleTurnSample(
+            user_input=entry["question"],
+            response=entry["answer"],
+            retrieved_contexts=entry["contexts"],
+            reference=entry["ground_truth"],
+        ))
+
+    if not samples:
+        print("No samples to evaluate.")
+        return pd.DataFrame()
+
+    # Run RAGAS
     print(f"\nRunning RAGAS metrics (evaluator={evaluator})...")
     eval_llm = _get_evaluator_llm(evaluator)
     eval_embeddings = _get_evaluator_embeddings()
 
     metrics = [
         _Faithfulness(),
-        _AnswerRelevancy(),
+        # strictness=1: generate 1 question per answer (not 3).
+        # Groq doesn't support n>1 in a single API call.
+        _AnswerRelevancy(strictness=1),
         _LLMContextPrecisionWithReference(),
         _LLMContextRecall(),
     ]
 
     dataset = EvaluationDataset(samples=samples)
-    # Pass llm and embeddings at the top level so RAGAS uses Groq + PubMedBERT
-    # for ALL metrics, instead of falling back to OpenAI defaults.
     eval_result = evaluate(
         dataset=dataset,
         metrics=metrics,
@@ -161,43 +238,66 @@ def run_ragas_evaluation(
         show_progress=True,
     )
 
-    # ── Build results DataFrame ─────────────────────────────────────────
+    # Build results DataFrame
     df = eval_result.to_pandas()
 
     # Add metadata columns
-    successful_qs = [q for q, _, _ in questions[:len(samples)]]
-    categories = [c for _, c, _ in questions[:len(samples)]]
-    df.insert(0, "question", successful_qs[:len(df)])
-    df.insert(1, "category", categories[:len(df)])
-    df["latency_sec"] = timings[:len(df)]
-    df["model"] = model
+    df.insert(0, "question", [e["question"] for e in gen_results[:len(df)]])
+    df.insert(1, "category", [e["category"] for e in gen_results[:len(df)]])
+    df["latency_sec"] = [e["latency_sec"] for e in gen_results[:len(df)]]
+    df["model"] = gen_model
     df["evaluator"] = evaluator
 
-    # ── Save results ────────────────────────────────────────────────────
+    # Save results
     EVAL_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    output_path = EVAL_RESULTS_DIR / f"ragas_{model}.csv"
+    output_path = EVAL_RESULTS_DIR / f"ragas_{gen_model}.csv"
     df.to_csv(output_path, index=False)
     print(f"\nResults saved to {output_path}")
 
-    # ── Print summary ───────────────────────────────────────────────────
+    _print_summary(df, gen_model, evaluator)
+    return df
+
+
+def run_ragas_evaluation(
+    model: str = "groq",
+    evaluator: str = "bedrock",
+    top_k: int = 4,
+    questions: list[tuple[str, str, str]] | None = None,
+) -> pd.DataFrame:
+    """All-in-one: generate answers then score them with RAGAS.
+
+    Args:
+        model: RAG chain LLM backend ("groq" or "bedrock").
+        evaluator: LLM to use as RAGAS judge ("groq" or "bedrock").
+        top_k: Number of chunks to retrieve per query.
+        questions: Override test questions. Defaults to TEST_QUESTIONS.
+
+    Returns:
+        DataFrame with per-question RAGAS scores.
+    """
+    generate_answers(model=model, top_k=top_k, questions=questions)
+    return score_answers(model=model, evaluator=evaluator)
+
+
+def _print_summary(df: pd.DataFrame, model: str, evaluator: str) -> None:
+    """Print RAGAS score summary table."""
     print(f"\n{'='*60}")
     print(f"RAGAS Evaluation Summary (model={model}, evaluator={evaluator})")
     print(f"{'='*60}")
     metric_cols = [c for c in df.columns if c in [
         "faithfulness", "answer_relevancy",
-        "context_precision", "LLMContextPrecisionWithReference",
-        "context_recall", "LLMContextRecall",
+        "context_precision", "llm_context_precision_with_reference",
+        "LLMContextPrecisionWithReference",
+        "context_recall", "llm_context_recall", "LLMContextRecall",
     ]]
     for col in metric_cols:
         mean_val = df[col].mean()
-        print(f"  {col:40s} {mean_val:.4f}")
+        print(f"  {col:45s} {mean_val:.4f}")
     avg_latency = df["latency_sec"].mean()
-    print(f"  {'avg_latency_sec':40s} {avg_latency:.1f}")
-    print(f"  {'questions_evaluated':40s} {len(df)}")
+    print(f"  {'avg_latency_sec':45s} {avg_latency:.1f}")
+    print(f"  {'questions_evaluated':45s} {len(df)}")
     print(f"{'='*60}")
-
-    return df
 
 
 if __name__ == "__main__":
-    run_ragas_evaluation(model="groq", evaluator="groq")
+    run_ragas_evaluation(model="groq", evaluator="bedrock")

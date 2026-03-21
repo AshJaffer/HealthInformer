@@ -2,11 +2,31 @@
 
 ## What is this project?
 
-HealthInformer is a RAG (Retrieval-Augmented Generation) medical question-answering system. A user types a health/general wellness question → we retrieve relevant passages from medical literature → an LLM synthesizes a plain-language, cited answer.
+HealthInformer is a RAG (Retrieval-Augmented Generation) medical question-answering system. A user types a health question → we retrieve relevant passages from medical literature → an LLM synthesizes a plain-language, cited answer.
 
 It's a **medical literacy tool for the general public** — NOT a diagnostic tool. Think: a smarter, more trustworthy version of Googling health questions where every answer is grounded in real PubMed sources with citations.
 
 This is a capstone project for the University of Michigan MADS program (SIADS 699). Due **April 21, 2026**.
+
+## Current status
+
+All 5 phases are built and working. The system is functional end-to-end.
+
+| Phase | Status | Details |
+|---|---|---|
+| Phase 1: Data Ingestion | ✅ Complete | 21,926 articles, 40,096 chunks across 36 categories (124 queries) |
+| Phase 2: Vector Store | ✅ Complete | All 40K chunks embedded with PubMedBERT, stored in ChromaDB |
+| Phase 3: RAG Pipeline | ✅ Complete | Groq (Llama 3.3 70B) + Bedrock (Claude 3.5 Haiku) both working |
+| Phase 4: Streamlit UI | ✅ Complete | Chat interface with citations, source cards, disclaimers, demographic inputs |
+| Phase 5: Evaluation | ✅ Code complete | RAGAS + PubMedQA + spot-check framework built. Needs full eval runs. |
+
+### What's left to do:
+- Expand test questions in `evaluation/test_questions.py` to cover all 36 topic categories (~50 questions total)
+- Run RAGAS eval on both models (Groq and Bedrock)
+- Run PubMedQA benchmark
+- Generate report visualizations (notebooks)
+- Phase 6 polish: README, DATA_ACCESS.md, clean code, requirements.txt
+- Report (partner handles), video, Slack gallery post
 
 ## Core question
 
@@ -25,13 +45,13 @@ The general public — people who Google health questions but want evidence-grou
 |---|---|---|
 | **Data sources** | PubMed E-utilities API, NIH/WHO guidelines | Free, no key needed (just email) |
 | **Embeddings** | PubMedBERT (`microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract`) | Domain-specific medical embeddings, 768-dim, 512 token max |
-| **Vector store** | ChromaDB | Local, persistent, free |
-| **LLM (free)** | Groq API → Llama 3.3 70B | Free tier, used as baseline |
-| **LLM (paid)** | AWS Bedrock → Claude Sonnet | $200 AWS Academy credit, accessed via Learner Lab |
-| **Orchestration** | LangChain | Keep it simple — just retrieval chain, no agents |
-| **Evaluation** | RAGAS framework + PubMedQA benchmark | Primary automated evaluation |
+| **Vector store** | ChromaDB | Local, persistent, free. Collection name: `healthinformer` |
+| **LLM (free)** | Groq API → Llama 3.3 70B Versatile | Free tier, 100K tokens/day rate limit |
+| **LLM (paid)** | AWS Bedrock → Claude 3.5 Haiku | $200 AWS Academy credit via Learner Lab. Sonnet blocked by SCP. |
+| **Orchestration** | LangChain (light) | Retrieval chain only, no agents |
+| **Evaluation** | RAGAS framework + PubMedQA benchmark | RAGAS uses Groq as evaluator LLM + PubMedBERT for embeddings |
 | **Frontend** | Streamlit | Chat interface with source cards |
-| **Language** | Python 3.11+ | Running on macOS, Apple M5 Pro, 64GB RAM |
+| **Language** | Python 3.11+ | Running on macOS, Apple M5 Pro, 64GB RAM, 1TB storage |
 
 ## Repository structure
 
@@ -40,56 +60,58 @@ HealthInformer/
 ├── README.md
 ├── requirements.txt
 ├── .env.example                 # API keys template (never commit .env)
+├── .env                         # gitignored — actual keys
 ├── .gitignore
 ├── DATA_ACCESS.md               # Required: how to access all data sources
 ├── CLAUDE.md                    # This file
 │
-├── ingest_data.py               # Entry point: fetch PubMed → chunk → save
-├── build_vectorstore.py         # Entry point: embed chunks → ChromaDB
-├── run_pipeline.py              # Entry point: CLI to test RAG pipeline
-├── run_eval.py                  # Entry point: RAGAS + PubMedQA evaluation
-├── app.py                       # Entry point: streamlit run app.py
+├── ingest_data.py               # Entry: fetch PubMed → chunk → save. Supports --test, --max-results
+├── build_vectorstore.py         # Entry: embed chunks → ChromaDB. Supports --test-query, --batch-size
+├── run_pipeline.py              # Entry: CLI Q&A. Supports --model groq/bedrock, --top-k N
+├── run_eval.py                  # Entry: full eval suite. Supports --ragas-only, --pubmedqa-only, --spot-check-only, --model, --evaluator
+├── app.py                       # Entry: streamlit run app.py
 │
 ├── config/
 │   ├── __init__.py
-│   ├── settings.py              # All tunable parameters (models, thresholds, paths)
-│   └── constants.py             # PubMed search queries, topic categories
+│   ├── settings.py              # All tunable parameters (models, thresholds, paths, API keys)
+│   └── constants.py             # 124 PubMed search queries across 36 topic categories
 │
 ├── data/
 │   ├── __init__.py
 │   ├── fetch_pubmed.py          # PubMed E-utilities API (search + fetch abstracts)
 │   ├── fetch_guidelines.py      # NIH/WHO guideline downloader
-│   ├── preprocess.py            # Text chunking (sentence-boundary, overlapping)
-│   └── raw/                     # .gitignore'd — downloaded data
+│   ├── preprocess.py            # Text chunking (sentence-boundary, overlapping, ~512 tokens)
+│   └── raw/                     # gitignored — articles.json (21,926) + chunks.json (40,096)
 │
 ├── vectorstore/
 │   ├── __init__.py
-│   ├── embedder.py              # PubMedBERT wrapper (embed text → 768-dim vectors)
-│   ├── store.py                 # ChromaDB interface (init, add, query)
-│   └── chroma_db/               # .gitignore'd — persisted vector data
+│   ├── embedder.py              # PubMedBERT wrapper via sentence-transformers
+│   ├── store.py                 # ChromaDB: init, add (upsert), query with cosine similarity
+│   └── chroma_db/               # gitignored — persisted ChromaDB data
 │
 ├── pipeline/
 │   ├── __init__.py
-│   ├── retriever.py             # Query → top-k chunks from ChromaDB
-│   ├── generator.py             # Chunks + query → LLM prompt → cited answer
-│   └── rag_chain.py             # Combines retriever + generator
+│   ├── retriever.py             # Query → embed → ChromaDB top-k → chunks with metadata
+│   ├── generator.py             # Chunks + query + demographic context → LLM prompt → cited answer
+│   └── rag_chain.py             # Combines retriever + generator. ask() returns answer + sources + contexts
 │
 ├── llm/
 │   ├── __init__.py
-│   ├── base.py                  # Abstract LLM interface (common API)
-│   ├── groq_client.py           # Groq API client (Llama 3)
-│   └── bedrock_client.py        # AWS Bedrock client (Claude Sonnet)
+│   ├── base.py                  # Abstract BaseLLM with generate(prompt, max_tokens, temperature, system_prompt)
+│   ├── groq_client.py           # Groq chat completions API
+│   └── bedrock_client.py        # AWS Bedrock Converse API (not invoke_model — needed for inference profiles)
 │
 ├── prompts/
-│   ├── system_prompt.txt        # Main system prompt for answer generation
-│   ├── citation_prompt.txt      # Citation formatting instructions
-│   └── demographic_context.txt  # Optional: light personalization template
+│   ├── system_prompt.txt        # Main: plain language, inline citations [1][2], sources list, disclaimer
+│   ├── citation_prompt.txt      # Citation formatting rules
+│   └── demographic_context.txt  # Optional age/sex personalization template
 │
 ├── evaluation/
 │   ├── __init__.py
-│   ├── ragas_eval.py            # RAGAS metric runner
-│   ├── pubmedqa_bench.py        # PubMedQA benchmark accuracy
-│   ├── spot_check.py            # Sample 50 responses for qualitative review
+│   ├── test_questions.py        # Curated test questions with ground truth sketches — NEEDS EXPANSION to cover all 36 categories
+│   ├── ragas_eval.py            # RAGAS runner using ChatGroq + PubMedBERT (no OpenAI dependency)
+│   ├── pubmedqa_bench.py        # PubMedQA benchmark (1,000 Qs, yes/no/maybe extraction)
+│   ├── spot_check.py            # Sample 50 responses → CSV for manual review
 │   └── results/                 # Output CSVs and plots
 │
 ├── notebooks/
@@ -102,63 +124,32 @@ HealthInformer/
     └── test_generator.py
 ```
 
-## Build phases (in order)
+## Corpus stats
 
-### Phase 1: Config + Data Ingestion
-- `config/settings.py` — central config, all parameters
-- `config/constants.py` — PubMed search queries defining corpus scope
-- `data/fetch_pubmed.py` — E-utilities API: search for PMIDs, fetch abstracts as XML, parse to JSON
-- `data/preprocess.py` — chunk abstracts into ~512-token pieces with overlap, preserve metadata
-- `ingest_data.py` — entry point that runs fetch → chunk → save to `data/raw/`
-
-### Phase 2: Embedding + Vector Store
-- `vectorstore/embedder.py` — load PubMedBERT via sentence-transformers, embed text
-- `vectorstore/store.py` — ChromaDB: create collection, add embedded chunks with metadata, query
-- `build_vectorstore.py` — entry point: load chunks → embed → store in ChromaDB
-
-### Phase 3: LLM Clients + RAG Pipeline
-- `llm/base.py` — abstract base class with `generate(prompt, max_tokens, temperature)` method
-- `llm/groq_client.py` — Groq API implementation (Llama 3.3 70B)
-- `llm/bedrock_client.py` — AWS Bedrock implementation (Claude Sonnet)
-- `pipeline/retriever.py` — takes query, returns top-k chunks from ChromaDB
-- `pipeline/generator.py` — takes query + chunks, builds prompt, calls LLM, returns cited answer
-- `pipeline/rag_chain.py` — combines retriever + generator into single `ask(question)` call
-- `prompts/` — system prompt, citation instructions, demographic context template
-- `run_pipeline.py` — CLI entry point to test end-to-end
-
-### Phase 4: Streamlit UI
-- `app.py` — chat interface with:
-  - Text input for questions
-  - Streaming response display
-  - Source cards showing cited PubMed articles (title, journal, link)
-  - Persistent disclaimer: "This is an educational tool, not medical advice"
-  - Model toggle (Groq vs Bedrock) for demo purposes
-  - Optional: age range / sex input for light personalization
-
-### Phase 5: Evaluation
-- `evaluation/ragas_eval.py` — run RAGAS metrics on a set of test questions
-- `evaluation/pubmedqa_bench.py` — benchmark against PubMedQA test set (500 questions)
-- `evaluation/spot_check.py` — sample 50 responses, save for manual review
-- `run_eval.py` — entry point: runs all evaluation, saves results to `evaluation/results/`
-- `notebooks/visualization.ipynb` — generate report figures from eval results
-
-### Phase 6: Polish
-- `README.md` — setup instructions, how to run, project overview
-- `DATA_ACCESS.md` — how to access PubMed, PubMedQA, NIH/WHO data
-- Clean code: remove unused blocks, convert absolute paths to relative, strip API keys
-- `requirements.txt` — only libraries actually used
+- **124 PubMed queries** across 36 topic categories
+- **21,926 unique articles** (deduplicated across queries)
+- **40,096 chunks** (~512 tokens each with overlap)
+- Top categories by chunk count: Nutrition (5,327), Mental Health (5,319), Exercise (3,848), Pain Management (2,829), Dermatology (1,878), Heart Health (1,644), Sexual Health (1,741), Digestive Health (1,406), Substance Use (1,434)
 
 ## Key architectural decisions
 
-**Plain Python over heavy frameworks.** Use LangChain lightly for the retrieval chain, but keep the core logic explicit. Every component should be understandable and explainable.
+**Bedrock uses Converse API, not invoke_model.** Newer inference profiles (like Haiku) don't support the old `invoke_model` with `anthropic_version`. The `converse()` API is model-agnostic.
 
-**LLM abstraction via `llm/base.py`.** Both Groq and Bedrock inherit the same interface. Swapping models is a config change, not a code change. This makes the model comparison clean.
+**Bedrock model is Claude 3.5 Haiku**, not Sonnet. Sonnet was blocked by the Learner Lab's Service Control Policy. Model ID: `us.anthropic.claude-3-5-haiku-20241022-v1:0`
 
-**Prompts as text files.** Stored in `prompts/`, not hardcoded. Easy to iterate, easy to reference in the report.
+**RAGAS evaluator uses Groq + PubMedBERT.** `ragas_eval.py` wraps our PubMedBERT embedder in a LangChain `Embeddings` interface and uses `ChatGroq` as the evaluator LLM. No OpenAI dependency.
 
-**Metadata travels with chunks.** Every chunk carries its source PMID, title, authors, journal, year, URL. This is how we generate citations in the answer.
+**RAGAS evaluation circularity** is a known limitation — using an LLM (Groq) to evaluate LLM-generated answers. Flagged in comments, will discuss in report.
 
-**Light personalization.** User can optionally provide age range, sex, relevant conditions. This is injected into the LLM prompt at generation time, NOT used for retrieval. Simple and effective.
+**Groq free tier rate limit** is 100K tokens/day. Run eval in batches if needed. Bedrock has no rate limit but credentials expire every ~4 hours (Learner Lab).
+
+**LLM abstraction via `llm/base.py`.** Both Groq and Bedrock inherit the same interface. Swapping models is a config change.
+
+**Prompts as text files** in `prompts/`, not hardcoded.
+
+**Metadata travels with chunks.** Every chunk carries PMID, title, authors, journal, year, URL, category. Used for citation generation.
+
+**Light personalization.** Optional age range + sex injected into LLM prompt at generation time, NOT used for retrieval.
 
 ## Evaluation thresholds (from proposal)
 
@@ -175,18 +166,23 @@ HealthInformer/
 ## Model comparison study
 
 Run identical evaluation set through both backends:
-- **Groq (Llama 3.3 70B)** — free tier baseline
-- **AWS Bedrock (Claude Sonnet)** — paid, higher quality expected
+- **Groq (Llama 3.3 70B Versatile)** — free tier baseline
+- **AWS Bedrock (Claude 3.5 Haiku)** — paid via Learner Lab
 
 Compare all RAGAS scores, PubMedQA accuracy, response quality, and latency. Report findings — no predetermined winner.
 
-## Data sources
+## .env variables needed
 
-- **PubMed abstracts**: via E-utilities API (free, need email). Search ~20 health topic queries, fetch several thousand abstracts.
-- **NIH/WHO guidelines**: public domain health guidelines and fact sheets.
-- **PubMedQA dataset**: 1,000 expert-annotated yes/no/maybe questions. Used for evaluation only. Available on GitHub.
+```
+PUBMED_EMAIL=your_email@umich.edu
+GROQ_API_KEY=gsk_your_key
+AWS_ACCESS_KEY_ID=from_learner_lab
+AWS_SECRET_ACCESS_KEY=from_learner_lab
+AWS_SESSION_TOKEN=from_learner_lab
+AWS_REGION=us-east-1
+```
 
-No raw data in the repo — provide scripts to reproduce ingestion + a DATA_ACCESS.md.
+**Note:** AWS Learner Lab credentials expire every ~4 hours. Re-copy from Learner Lab → AWS Details each session.
 
 ## Coding conventions
 
@@ -195,26 +191,15 @@ No raw data in the repo — provide scripts to reproduce ingestion + a DATA_ACCE
 - Docstrings on all public functions explaining what, why, and how
 - Config values imported from `config/settings.py`, never hardcoded
 - Print progress during long operations (data fetching, embedding, eval)
-- Handle errors gracefully — don't crash on a single bad PubMed article
+- Handle errors gracefully — don't crash on a single bad article or API timeout
 - Keep functions focused and small
 - Use `if __name__ == "__main__"` blocks so modules are runnable standalone
 
-## .env variables needed
-
-```
-PUBMED_EMAIL=ajaffer@umich.edu
-GROQ_API_KEY=your_groq_key
-AWS_ACCESS_KEY_ID=from_learner_lab
-AWS_SECRET_ACCESS_KEY=from_learner_lab
-AWS_SESSION_TOKEN=from_learner_lab
-AWS_REGION=us-east-1
-```
-
 ## Deliverables (due April 21, 2026)
 
-- GitHub repo with README, requirements.txt, reproducible code
+- GitHub repo with README, requirements.txt, DATA_ACCESS.md, reproducible code
 - Written report (under 3,000 words) with 3+ data visualizations
-- 3-5 minute video summary
-- Slack gallery post
-- DATA_ACCESS.md
+- 3-5 minute video summary or poster
+- Slack gallery post in #mads-capstone-gallery
 - Statement of work in report
+- In-line code attributions for external code

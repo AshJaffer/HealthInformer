@@ -1,8 +1,12 @@
-"""Curated test questions spanning all topic categories.
+"""Curated test questions spanning all 36 topic categories.
 
 These are our "gold" test set for RAGAS evaluation. Each question includes
 an optional ground_truth answer sketch (used by context_recall) and the
 expected topic category for analysis breakdowns.
+
+Coverage: ~50 questions across all 36 categories from config/constants.py.
+Question style: plain-language questions a general-public user would ask.
+Mix of factual, comparative, and lifestyle question types.
 """
 
 # Each entry: (question, category, ground_truth_sketch)
@@ -29,12 +33,6 @@ TEST_QUESTIONS: list[tuple[str, str, str]] = [
         "Hypertension",
         "Reducing sodium intake, regular exercise, maintaining healthy weight, "
         "limiting alcohol, managing stress, and eating a DASH-style diet.",
-    ),
-    (
-        "What are the risks of untreated high blood pressure?",
-        "Hypertension",
-        "Untreated hypertension increases risk of heart attack, stroke, kidney damage, "
-        "vision loss, and heart failure.",
     ),
 
     # ── Asthma ──────────────────────────────────────────────────────────
@@ -68,6 +66,8 @@ TEST_QUESTIONS: list[tuple[str, str, str]] = [
         "Guidelines generally recommend mammography screening starting at age 40-50, "
         "depending on risk factors and the guideline organization.",
     ),
+
+    # ── Cancer Prevention ───────────────────────────────────────────────
     (
         "What are the recommended screenings for colorectal cancer?",
         "Cancer Prevention",
@@ -97,7 +97,7 @@ TEST_QUESTIONS: list[tuple[str, str, str]] = [
         "for its effectiveness, often comparable to or better than medication alone.",
     ),
 
-    # ── Sleep Health ────────────────────────bedeutung────────────────────────
+    # ── Sleep Health ────────────────────────────────────────────────────
     (
         "What are recommended treatments for chronic insomnia?",
         "Sleep Health",
@@ -113,10 +113,10 @@ TEST_QUESTIONS: list[tuple[str, str, str]] = [
         "rich in fruits, vegetables, whole grains, lean protein, and healthy fats.",
     ),
     (
-        "How does diet affect cardiovascular disease risk?",
+        "Is intermittent fasting safe and effective for weight loss?",
         "Nutrition",
-        "Diet affects cardiovascular risk through blood pressure, cholesterol levels, "
-        "inflammation, blood sugar control, and body weight.",
+        "Evidence suggests intermittent fasting can aid weight loss and improve metabolic markers, "
+        "but results are comparable to standard caloric restriction. Not recommended for everyone.",
     ),
 
     # ── Exercise ────────────────────────────────────────────────────────
@@ -125,6 +125,12 @@ TEST_QUESTIONS: list[tuple[str, str, str]] = [
         "Exercise",
         "Adults should get at least 150 minutes of moderate-intensity or 75 minutes of "
         "vigorous-intensity aerobic activity per week, plus muscle-strengthening activities.",
+    ),
+    (
+        "What's the difference between cardio and strength training benefits?",
+        "Exercise",
+        "Cardio improves cardiovascular fitness, endurance, and calorie burn. Strength training "
+        "builds muscle mass, bone density, and metabolic rate. Both are recommended for overall health.",
     ),
 
     # ── Weight Management ───────────────────────────────────────────────
@@ -143,10 +149,10 @@ TEST_QUESTIONS: list[tuple[str, str, str]] = [
         "but vaccination reduces severity of illness and risk of hospitalization.",
     ),
     (
-        "Who should get the flu vaccine each year?",
+        "What vaccines are recommended for adults over 65?",
         "Vaccines",
-        "Everyone 6 months and older should receive annual flu vaccination, "
-        "especially high-risk groups like elderly, pregnant women, and immunocompromised individuals.",
+        "Recommended vaccines include influenza (high-dose), pneumococcal, shingles (Shingrix), "
+        "Tdap booster, and COVID-19 boosters.",
     ),
 
     # ── COVID-19 ────────────────────────────────────────────────────────
@@ -175,16 +181,11 @@ TEST_QUESTIONS: list[tuple[str, str, str]] = [
 
     # ── Women's Health ──────────────────────────────────────────────────
     (
-        "What are common symptoms of menopause?",
+        "What are common symptoms of menopause and how are they managed?",
         "Women's Health",
-        "Common symptoms include hot flashes, night sweats, mood changes, sleep disturbances, "
-        "vaginal dryness, and changes in bone density.",
-    ),
-    (
-        "What treatment options exist for menopause symptoms?",
-        "Women's Health",
-        "Options include hormone replacement therapy (HRT), non-hormonal medications, "
-        "lifestyle modifications, and cognitive behavioral therapy.",
+        "Common symptoms include hot flashes, night sweats, mood changes, and sleep disturbances. "
+        "Management options include hormone replacement therapy, non-hormonal medications, "
+        "and lifestyle modifications.",
     ),
 
     # ── Bone Health ─────────────────────────────────────────────────────
@@ -203,6 +204,190 @@ TEST_QUESTIONS: list[tuple[str, str, str]] = [
         "medication review, vision checks, and assistive devices.",
     ),
 
+    # ── Sexual Health ───────────────────────────────────────────────────
+    (
+        "What are the most effective ways to prevent sexually transmitted infections?",
+        "Sexual Health",
+        "Prevention includes consistent condom use, regular STI screening, vaccination (HPV, hepatitis B), "
+        "limiting number of partners, and open communication with partners.",
+    ),
+    (
+        "What treatment options are available for erectile dysfunction?",
+        "Sexual Health",
+        "Treatment options include PDE5 inhibitors (sildenafil, tadalafil), lifestyle changes, "
+        "testosterone therapy if deficient, vacuum devices, and psychological counseling.",
+    ),
+
+    # ── Dermatology ─────────────────────────────────────────────────────
+    (
+        "What are the best ways to protect skin from sun damage?",
+        "Dermatology",
+        "Sun protection includes broad-spectrum sunscreen (SPF 30+), protective clothing, "
+        "seeking shade during peak hours, avoiding tanning beds, and regular skin checks.",
+    ),
+    (
+        "What treatments are available for eczema?",
+        "Dermatology",
+        "Treatments include moisturizers, topical corticosteroids, calcineurin inhibitors, "
+        "antihistamines for itching, and avoiding known triggers like harsh soaps and allergens.",
+    ),
+
+    # ── Allergies ───────────────────────────────────────────────────────
+    (
+        "How are seasonal allergies treated?",
+        "Allergies",
+        "Treatment includes antihistamines, nasal corticosteroid sprays, decongestants, "
+        "allergen avoidance, and immunotherapy (allergy shots) for severe cases.",
+    ),
+    (
+        "What should someone do during a severe allergic reaction?",
+        "Allergies",
+        "Use an epinephrine auto-injector immediately, call emergency services, lie down with legs elevated, "
+        "and seek immediate medical attention. Anaphylaxis can be life-threatening.",
+    ),
+
+    # ── Substance Use ───────────────────────────────────────────────────
+    (
+        "What are the health risks of vaping and e-cigarettes?",
+        "Substance Use",
+        "Health risks include lung damage (EVALI), nicotine addiction, cardiovascular effects, "
+        "exposure to harmful chemicals, and potential gateway to traditional cigarettes in youth.",
+    ),
+    (
+        "What are the most effective methods to quit smoking?",
+        "Substance Use",
+        "Effective methods include nicotine replacement therapy (patches, gum), prescription medications "
+        "(varenicline, bupropion), behavioral counseling, and combination approaches.",
+    ),
+
+    # ── Pain Management ─────────────────────────────────────────────────
+    (
+        "What are non-drug treatments for chronic back pain?",
+        "Pain Management",
+        "Non-drug treatments include physical therapy, exercise, yoga, acupuncture, "
+        "cognitive behavioral therapy, massage, and spinal manipulation.",
+    ),
+    (
+        "What causes migraines and how can they be prevented?",
+        "Pain Management",
+        "Migraines are caused by neurological changes involving blood vessels and neurotransmitters. "
+        "Prevention includes identifying triggers, stress management, regular sleep, "
+        "and preventive medications like beta-blockers or anti-seizure drugs.",
+    ),
+
+    # ── Oral Health ─────────────────────────────────────────────────────
+    (
+        "How does oral health affect overall body health?",
+        "Oral Health",
+        "Poor oral health is linked to cardiovascular disease, diabetes, respiratory infections, "
+        "and adverse pregnancy outcomes. Periodontal bacteria can enter the bloodstream.",
+    ),
+
+    # ── Eye Health ──────────────────────────────────────────────────────
+    (
+        "How can I reduce eye strain from screens?",
+        "Eye Health",
+        "Follow the 20-20-20 rule (every 20 minutes look at something 20 feet away for 20 seconds), "
+        "adjust screen brightness, use proper lighting, blink frequently, and take regular breaks.",
+    ),
+
+    # ── Ear Health ──────────────────────────────────────────────────────
+    (
+        "How can hearing loss be prevented?",
+        "Ear Health",
+        "Prevention includes limiting exposure to loud noises, wearing ear protection, "
+        "keeping volume low on personal audio devices, and getting regular hearing checks.",
+    ),
+
+    # ── Digestive Health ────────────────────────────────────────────────
+    (
+        "What helps manage irritable bowel syndrome symptoms?",
+        "Digestive Health",
+        "Management includes dietary changes (low-FODMAP diet), stress management, regular exercise, "
+        "adequate hydration, fiber supplementation, and medications for specific symptoms.",
+    ),
+    (
+        "Are probiotics actually beneficial for gut health?",
+        "Digestive Health",
+        "Evidence supports probiotics for specific conditions like antibiotic-associated diarrhea "
+        "and IBS, but benefits are strain-specific. General gut health claims lack strong evidence.",
+    ),
+
+    # ── Heart Health ────────────────────────────────────────────────────
+    (
+        "What are the warning signs of a stroke?",
+        "Heart Health",
+        "Warning signs follow the FAST acronym: Face drooping, Arm weakness, Speech difficulty, "
+        "Time to call emergency services. Other signs include sudden confusion, vision problems, "
+        "severe headache, and dizziness.",
+    ),
+    (
+        "How can cholesterol levels be managed without medication?",
+        "Heart Health",
+        "Lifestyle changes include eating soluble fiber, reducing saturated and trans fats, "
+        "regular exercise, maintaining healthy weight, and limiting alcohol.",
+    ),
+
+    # ── Respiratory ─────────────────────────────────────────────────────
+    (
+        "What are the treatment options for sleep apnea?",
+        "Respiratory",
+        "Treatment includes CPAP therapy, oral appliances, weight loss, positional therapy, "
+        "lifestyle changes, and in severe cases surgery.",
+    ),
+
+    # ── Endocrine ───────────────────────────────────────────────────────
+    (
+        "What are the symptoms of thyroid disorders?",
+        "Endocrine",
+        "Hypothyroidism symptoms include fatigue, weight gain, cold intolerance, and depression. "
+        "Hyperthyroidism symptoms include weight loss, rapid heartbeat, anxiety, and heat intolerance.",
+    ),
+
+    # ── Aging ───────────────────────────────────────────────────────────
+    (
+        "What lifestyle habits are associated with healthy aging?",
+        "Aging",
+        "Healthy aging habits include regular physical activity, social engagement, mental stimulation, "
+        "balanced diet, adequate sleep, stress management, and preventive healthcare.",
+    ),
+    (
+        "What can be done to reduce the risk of dementia?",
+        "Aging",
+        "Risk reduction includes regular exercise, cognitive stimulation, social engagement, "
+        "managing cardiovascular risk factors, healthy diet, and adequate sleep.",
+    ),
+
+    # ── Pediatrics ──────────────────────────────────────────────────────
+    (
+        "What vaccines are recommended for children in their first year?",
+        "Pediatrics",
+        "First-year vaccines typically include hepatitis B, DTaP, IPV (polio), Hib, PCV13, "
+        "rotavirus, and influenza, following the CDC recommended schedule.",
+    ),
+    (
+        "How can childhood obesity be prevented?",
+        "Pediatrics",
+        "Prevention includes encouraging physical activity, limiting screen time, providing "
+        "nutritious meals, reducing sugary drinks, and modeling healthy behaviors.",
+    ),
+
+    # ── Travel Health ───────────────────────────────────────────────────
+    (
+        "What health precautions should travelers take before international trips?",
+        "Travel Health",
+        "Precautions include checking required vaccinations, carrying medications, "
+        "travel health insurance, food and water safety awareness, and consulting a travel medicine clinic.",
+    ),
+
+    # ── Environmental Health ────────────────────────────────────────────
+    (
+        "How does air pollution affect health?",
+        "Environmental Health",
+        "Air pollution increases risk of respiratory diseases, cardiovascular disease, lung cancer, "
+        "and premature death. Fine particulate matter (PM2.5) is especially harmful.",
+    ),
+
     # ── Cross-cutting questions ─────────────────────────────────────────
     (
         "What is the relationship between obesity and type 2 diabetes?",
@@ -215,12 +400,6 @@ TEST_QUESTIONS: list[tuple[str, str, str]] = [
         "Mental Health",
         "Exercise reduces symptoms of depression and anxiety through endorphin release, "
         "improved sleep, stress reduction, and increased self-efficacy.",
-    ),
-    (
-        "What vaccines are recommended for adults over 65?",
-        "Vaccines",
-        "Recommended vaccines include influenza (high-dose), pneumococcal, shingles (Shingrix), "
-        "Tdap booster, and COVID-19 boosters.",
     ),
     (
         "How does chronic stress affect physical health?",

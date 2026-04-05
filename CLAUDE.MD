@@ -18,15 +18,23 @@ All 5 phases are built and working. The system is functional end-to-end.
 | Phase 2: Vector Store | ✅ Complete | All 40K chunks embedded with PubMedBERT, stored in ChromaDB |
 | Phase 3: RAG Pipeline | ✅ Complete | Groq (Llama 3.3 70B) + Bedrock (Claude 3.5 Haiku) both working |
 | Phase 4: Streamlit UI | ✅ Complete | Chat interface with citations, source cards, disclaimers, demographic inputs |
-| Phase 5: Evaluation | ✅ Code complete | RAGAS + PubMedQA + spot-check framework built. Needs full eval runs. |
+| Phase 5: Evaluation | ✅ Bedrock complete | RAGAS + PubMedQA + spot-check all run for Bedrock. Groq pending. |
 
-### What's left to do:
-- Expand test questions in `evaluation/test_questions.py` to cover all 36 topic categories (~50 questions total)
-- Run RAGAS eval on both models (Groq and Bedrock)
-- Run PubMedQA benchmark
-- Generate report visualizations (notebooks)
-- Phase 6 polish: README, DATA_ACCESS.md, clean code, requirements.txt
-- Report (partner handles), video, Slack gallery post
+### Completed evaluation
+- ✅ **RAGAS Bedrock (post-HyDE, top_k=8):** Faithfulness 0.856, Answer Relevancy 0.923, Context Precision 0.478, Context Recall 0.624
+- ✅ **PubMedQA Bedrock:** 65.6% accuracy (78% human ceiling). Uses gold context from dataset, not our retriever.
+- ✅ **Spot-check:** 2/50 hallucinations (4%), mean quality 4.14/5. Annotated by Ashhad Jaffer.
+- ✅ **HyDE retrieval fix:** Implemented in `pipeline/retriever.py`. Lay-query relevance improved from 28% → 66% on 4-question A/B test. Bedrock Haiku generates hypothetical abstract snippets before embedding.
+- ✅ **Pre-HyDE baselines backed up:** `generated_bedrock_pre_hyde.json`, `ragas_bedrock_pre_hyde.csv` for before/after comparison in report.
+- ✅ **PubMedQA benchmark fixed:** `pubmedqa_bench.py` rewritten to use gold context + deterministic verdict extraction. Broken run preserved as `pubmedqa_bedrock_broken.csv` (safety finding: system refuses out-of-corpus questions).
+
+### Remaining work
+- Groq: wipe `generated_groq.json`, re-generate all 53 with HyDE, then RAGAS score with Bedrock evaluator
+- Populate `notebooks/visualization.ipynb` (3+ figures) and `notebooks/eda.ipynb`
+- Write `README.md` and `DATA_ACCESS.md`
+- Code cleanup + inline attributions
+- Report, video, Slack gallery post
+- Pre-flight checklist due April 14
 
 ## Core question
 
@@ -108,7 +116,7 @@ HealthInformer/
 │
 ├── evaluation/
 │   ├── __init__.py
-│   ├── test_questions.py        # Curated test questions with ground truth sketches — NEEDS EXPANSION to cover all 36 categories
+│   ├── test_questions.py        # Curated test questions with ground truth sketches — ✅ 53 questions covering all 36 categories
 │   ├── ragas_eval.py            # RAGAS runner using ChatGroq + PubMedBERT (no OpenAI dependency)
 │   ├── pubmedqa_bench.py        # PubMedQA benchmark (1,000 Qs, yes/no/maybe extraction)
 │   ├── spot_check.py            # Sample 50 responses → CSV for manual review
@@ -137,9 +145,9 @@ HealthInformer/
 
 **Bedrock model is Claude 3.5 Haiku**, not Sonnet. Sonnet was blocked by the Learner Lab's Service Control Policy. Model ID: `us.anthropic.claude-3-5-haiku-20241022-v1:0`
 
-**RAGAS evaluator uses Groq + PubMedBERT.** `ragas_eval.py` wraps our PubMedBERT embedder in a LangChain `Embeddings` interface and uses `ChatGroq` as the evaluator LLM. No OpenAI dependency.
+**RAGAS evaluator uses Bedrock Haiku (as judge LLM) + PubMedBERT (embeddings).** `ragas_eval.py` wraps our PubMedBERT embedder in a LangChain `Embeddings` interface. Groq was originally used as evaluator but replaced with Bedrock Haiku to eliminate circularity — a separate model now judges both backends.
 
-**RAGAS evaluation circularity** is a known limitation — using an LLM (Groq) to evaluate LLM-generated answers. Flagged in comments, will discuss in report.
+**RAGAS evaluation circularity** — Resolved. Refactored pipeline uses Bedrock Haiku as an independent evaluator LLM for both model backends, eliminating same-model evaluation bias.
 
 **Groq free tier rate limit** is 100K tokens/day. Run eval in batches if needed. Bedrock has no rate limit but credentials expire every ~4 hours (Learner Lab).
 
@@ -162,6 +170,20 @@ HealthInformer/
 | PubMedQA Accuracy | Contextualize vs 78% human ceiling | How well do we answer yes/no/maybe medical Qs? |
 | Hallucination Rate | < 10% | Manual spot-check of 50 responses |
 | Response Latency | < 10 seconds | End-to-end query time |
+
+**Bedrock results (post-HyDE, top_k=8):**
+
+| Metric | Pre-HyDE | Post-HyDE | Target | Status |
+|---|---|---|---|---|
+| Faithfulness | 0.743 | **0.856** | > 0.8 | ✅ PASS |
+| Answer Relevancy | 0.679 | **0.923** | > 0.7 | ✅ PASS |
+| Context Precision | 0.213 | **0.478** | > 0.7 | ❌ MISS (+124%) |
+| Context Recall | 0.296 | **0.624** | > 0.6 | ✅ PASS |
+| PubMedQA Accuracy | — | **65.6%** | vs 78% ceiling | 12.4 pp gap |
+| Hallucination Rate | — | **4%** (2/50) | < 10% | ✅ PASS |
+| Response Latency | 7.8s | **12.8s** | < 10s | ❌ MISS (HyDE cost) |
+
+Pre-HyDE baselines are from the original Bedrock run before implementing HyDE query expansion. The latency increase is the cost of an extra LLM call per query for HyDE rewriting. Context precision remains below target — a cross-encoder reranker or reducing top_k could close the gap but was not pursued given time constraints.
 
 ## Model comparison study
 

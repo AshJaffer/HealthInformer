@@ -52,13 +52,21 @@ class RAGChain:
         """
         self.top_k = top_k
 
-        # Shared embedder and store for the retriever
-        embedder = Embedder()
-        store = VectorStore()
-        self.retriever = Retriever(embedder=embedder, store=store)
-
+        # Build the LLM first so we can share it with the retriever as
+        # the HyDE rewriter. Sharing one client avoids constructing a
+        # second backend (e.g. Groq) for query rewriting when the user
+        # has picked Bedrock for generation — important when one of the
+        # backends is rate-limited or has stale credentials.
         llm = _create_llm(model)
         self.generator = Generator(llm=llm)
+
+        # Shared embedder and store for the retriever; rewriter=llm
+        # enables HyDE using the same backend as generation.
+        embedder = Embedder()
+        store = VectorStore()
+        self.retriever = Retriever(
+            embedder=embedder, store=store, rewriter=llm,
+        )
 
         self.model_name = model
         print(f"RAG chain ready (model={model}, top_k={top_k})")

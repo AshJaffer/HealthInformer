@@ -1,6 +1,6 @@
 # HealthInformer
 
-A Retrieval-Augmented Generation (RAG) system that answers health questions using evidence from PubMed medical literature. Users ask questions in plain language and receive cited, accessible responses grounded in peer-reviewed research. HealthInformer is a medical literacy tool for the general public -- not a diagnostic tool. Every answer includes inline citations linking to the original PubMed articles and a disclaimer that the information is educational, not medical advice.
+A Retrieval-Augmented Generation (RAG) system that answers general health questions using evidence from PubMed medical literature. Users ask questions in plain language and receive cited, accessible responses grounded in peer-reviewed research. HealthInformer is a medical literacy tool for the general public, not a diagnostic tool. Every answer includes inline citations linking to the original PubMed articles and a disclaimer that the information is educational, not medical advice.
 
 Capstone project for the University of Michigan MADS program (SIADS 699).
 

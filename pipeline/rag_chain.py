@@ -61,7 +61,7 @@ class RAGChain:
 
         # HyDE rewriter: for bedrock-llama, use Bedrock Haiku for HyDE
         # instead of Llama. Llama's HyDE abstracts embed poorly in
-        # PubMedBERT space (~65% off-topic retrieval), while Claude's
+        # PubMedBERT space (~65% off-topic retrieval), while Claude Haiku's
         # HyDE abstracts retrieve well. This keeps retrieval quality
         # identical across backends so the comparison isolates only
         # the generation step.

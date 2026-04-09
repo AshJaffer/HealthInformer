@@ -79,11 +79,11 @@ class Retriever:
         self._rewriter = rewriter
 
     def _get_rewriter(self) -> BaseLLM:
-        """Lazily construct a Groq rewriter client so the import cost
+        """Lazily construct a rewriter client so the import cost
         and API-key requirement only apply when rewriting is enabled."""
         if self._rewriter is None:
-            from llm.groq_client import GroqLLM
-            self._rewriter = GroqLLM()
+            from llm.bedrock_client import BedrockLLM
+            self._rewriter = BedrockLLM()
         return self._rewriter
 
     def rewrite_query(self, query: str) -> str:

@@ -23,3 +23,4 @@ langchain-core>=0.2.0
 langchain-groq>=0.1.0
 langchain-aws>=1.0.0
 pandas>=2.0.0
+matplotlib>=3.7.0

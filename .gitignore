@@ -8,6 +8,3 @@ vectorstore/chroma_db/
 evaluation/results/*.csv
 evaluation/results/*.png
 .ipynb_checkpoints/
-CLAUDE.md
-CLAUDE.MD
-.claude/

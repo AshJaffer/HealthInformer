@@ -48,7 +48,7 @@ def _build_context_block(chunks: list[dict[str, Any]]) -> str:
 # prompt and refuses to answer ~65% of questions even when the retrieved
 # context contains relevant (if imperfect) information.  This supplement
 # nudges it to synthesise from what is available without removing the
-# honest-uncertainty clause that works well for Claude.
+# honest-uncertainty clause that works well for Claude Haiku.
 _LLAMA_SYNTHESIS_SUPPLEMENT = (
     "\n\nIMPORTANT: The context passages above were retrieved from a "
     "medical research corpus and are likely relevant to the question. "

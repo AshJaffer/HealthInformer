@@ -1,6 +1,6 @@
 # Data Access Statement
 
-This document describes how to access all data used in the HealthInformer project. Raw data is not redistributed in this repository -- instead, we provide scripts to reproduce it from public sources.
+This document describes how to access all data used in the HealthInformer project. Raw data is not redistributed in this repository, instead we provide scripts to reproduce it from public sources.
 
 ## PubMed Abstracts (Primary Corpus)
 

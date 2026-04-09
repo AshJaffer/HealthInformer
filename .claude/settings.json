@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(find /Users/ashhad/HealthInformer -name '__pycache__' -type d -not -path '*/.venv/*' -exec rm -rf {} +)",
-      "Bash(python3 -c \"import pandas as pd; df=pd.read_csv\\('evaluation/results/spot_check_bedrock.csv'\\); print\\('Haiku quality mean:', df['quality_1to5'].mean\\(\\)\\); df2=pd.read_csv\\('evaluation/results/spot_check_llama.csv'\\); print\\('Llama quality mean:', df2['quality_1to5'].mean\\(\\)\\)\")"
+      "Bash(python3 -c \"import pandas as pd; df=pd.read_csv\\('evaluation/results/spot_check_bedrock.csv'\\); print\\('Haiku quality mean:', df['quality_1to5'].mean\\(\\)\\); df2=pd.read_csv\\('evaluation/results/spot_check_llama.csv'\\); print\\('Llama quality mean:', df2['quality_1to5'].mean\\(\\)\\)\")",
+      "Bash(cat notebooks/*.ipynb)",
+      "Bash(python3 -c ':*)",
+      "Bash(grep -rh --include=\"*.py\" \"^import \\\\|^from \" --exclude-dir=.venv --exclude-dir=__pycache__ --exclude-dir=.git /Users/ashhad/HealthInformer/*.py /Users/ashhad/HealthInformer/config/ /Users/ashhad/HealthInformer/data/ /Users/ashhad/HealthInformer/vectorstore/ /Users/ashhad/HealthInformer/pipeline/ /Users/ashhad/HealthInformer/llm/ /Users/ashhad/HealthInformer/evaluation/)",
+      "Bash(python3)"
     ],
     "additionalDirectories": []
   }

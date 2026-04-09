@@ -28,9 +28,12 @@ with st.sidebar:
 
     model_choice = st.selectbox(
         "LLM Model",
-        options=["groq", "bedrock"],
-        format_func=lambda x: "Groq — Llama 3.3 70B (free)" if x == "groq"
-                               else "AWS Bedrock — Claude 3.5 Sonnet",
+        options=["bedrock", "bedrock-llama", "groq"],
+        format_func=lambda x: {
+            "bedrock": "AWS Bedrock — Claude 3.5 Haiku",
+            "bedrock-llama": "AWS Bedrock — Llama 3.3 70B",
+            "groq": "Groq — Llama 3.3 70B (free tier)",
+        }[x],
     )
 
     top_k = st.slider("Sources to retrieve", min_value=3, max_value=10, value=5)

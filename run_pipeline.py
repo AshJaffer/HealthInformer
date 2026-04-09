@@ -26,7 +26,7 @@ def main() -> None:
         "--model",
         type=str,
         default="groq",
-        choices=["groq", "bedrock"],
+        choices=["groq", "bedrock", "bedrock-llama"],
         help="LLM backend to use (default: groq)",
     )
     parser.add_argument(

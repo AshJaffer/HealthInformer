@@ -1,6 +1,9 @@
 {
   "permissions": {
-    "allow": [],
+    "allow": [
+      "Bash(find /Users/ashhad/HealthInformer -name '__pycache__' -type d -not -path '*/.venv/*' -exec rm -rf {} +)",
+      "Bash(python3 -c \"import pandas as pd; df=pd.read_csv\\('evaluation/results/spot_check_bedrock.csv'\\); print\\('Haiku quality mean:', df['quality_1to5'].mean\\(\\)\\); df2=pd.read_csv\\('evaluation/results/spot_check_llama.csv'\\); print\\('Llama quality mean:', df2['quality_1to5'].mean\\(\\)\\)\")"
+    ],
     "additionalDirectories": []
   }
 }

@@ -133,7 +133,8 @@ def run_spot_check(
     # ── Save ────────────────────────────────────────────────────────────
     df = pd.DataFrame(rows)
     EVAL_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    output_path = EVAL_RESULTS_DIR / f"spot_check_{model}.csv"
+    file_name = {"bedrock-llama": "llama"}.get(model, model)
+    output_path = EVAL_RESULTS_DIR / f"spot_check_{file_name}.csv"
     df.to_csv(output_path, index=False)
 
     print(f"\nResults saved to {output_path}")

@@ -104,33 +104,59 @@ def _get_evaluator_embeddings() -> LangchainEmbeddingsWrapper:
     return LangchainEmbeddingsWrapper(_PubMedBERTEmbeddings())
 
 
+# Map backend names to cleaner file names for output artifacts.
+_FILE_NAMES: dict[str, str] = {
+    "bedrock-llama": "llama",
+}
+
+
 def _generation_path(model: str) -> Path:
     """Standard path for saved generation JSON."""
-    return EVAL_RESULTS_DIR / f"generated_{model}.json"
+    name = _FILE_NAMES.get(model, model)
+    return EVAL_RESULTS_DIR / f"generated_{name}.json"
 
 
 def generate_answers(
     model: str = "groq",
     top_k: int = 4,
     questions: list[tuple[str, str, str]] | None = None,
+    resume: bool = True,
 ) -> Path:
     """Run the RAG chain on test questions and save results to JSON.
+
+    Supports resuming from a partial run: if a generation file already
+    exists for this model, previously answered questions are skipped.
 
     Args:
         model: LLM backend for generation ("groq" or "bedrock").
         top_k: Number of chunks to retrieve per query.
         questions: Override test questions. Defaults to TEST_QUESTIONS.
+        resume: If True, load existing partial results and continue.
 
     Returns:
         Path to the saved JSON file.
     """
     questions = questions or TEST_QUESTIONS
-    chain = RAGChain(model=model, top_k=top_k)
+    output_path = _generation_path(model)
 
+    # Resume support: load existing results and skip completed questions
     results: list[dict[str, Any]] = []
+    done_questions: set[str] = set()
+    if resume and output_path.exists():
+        existing = json.loads(output_path.read_text())
+        if existing.get("top_k") == top_k:
+            results = existing["results"]
+            done_questions = {r["question"] for r in results}
+            print(f"\nResuming: {len(results)} questions already completed, "
+                  f"{len(questions) - len(done_questions)} remaining.")
+
+    chain = RAGChain(model=model, top_k=top_k)
     print(f"\nGenerating answers for {len(questions)} questions (model={model}, top_k={top_k})...")
 
     for i, (question, category, ground_truth) in enumerate(questions, 1):
+        if question in done_questions:
+            print(f"  [{i}/{len(questions)}] (cached) {question[:60]}")
+            continue
         print(f"  [{i}/{len(questions)}] {question[:60]}...")
         start = time.time()
         try:
@@ -145,29 +171,39 @@ def generate_answers(
                 "latency_sec": round(elapsed, 3),
             })
             print(f"    OK ({elapsed:.1f}s)")
+            # Save after each question so progress is never lost
+            _save_generation(output_path, model, top_k, len(questions), results)
         except Exception as e:
             error_msg = str(e)
             print(f"    ERROR: {error_msg}")
             # Stop early on rate limit — remaining questions will all fail too
             if "rate_limit" in error_msg.lower() or "429" in error_msg:
                 print(f"\n  Rate limit hit after {len(results)} questions. Saving partial results.")
+                _save_generation(output_path, model, top_k, len(questions), results)
                 break
 
-    # Save to JSON
+    # Final save
+    _save_generation(output_path, model, top_k, len(questions), results)
+    print(f"\nGenerated answers saved to {output_path}")
+    print(f"  {len(results)}/{len(questions)} questions succeeded")
+    return output_path
+
+
+def _save_generation(
+    path: Path, model: str, top_k: int,
+    total: int, results: list[dict[str, Any]],
+) -> None:
+    """Write generation results to JSON."""
     EVAL_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     output = {
         "model": model,
         "top_k": top_k,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "total_questions": len(questions),
+        "total_questions": total,
         "successful": len(results),
         "results": results,
     }
-    output_path = _generation_path(model)
-    output_path.write_text(json.dumps(output, indent=2))
-    print(f"\nGenerated answers saved to {output_path}")
-    print(f"  {len(results)}/{len(questions)} questions succeeded")
-    return output_path
+    path.write_text(json.dumps(output, indent=2))
 
 
 def score_answers(
@@ -250,7 +286,8 @@ def score_answers(
 
     # Save results
     EVAL_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    output_path = EVAL_RESULTS_DIR / f"ragas_{gen_model}.csv"
+    file_name = _FILE_NAMES.get(gen_model, gen_model)
+    output_path = EVAL_RESULTS_DIR / f"ragas_{file_name}.csv"
     df.to_csv(output_path, index=False)
     print(f"\nResults saved to {output_path}")
 

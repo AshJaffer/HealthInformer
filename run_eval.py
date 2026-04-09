@@ -4,7 +4,6 @@ Supports split-phase workflow to work within Groq free-tier rate limits:
   1. --generate-only: run RAG chain, save answers to JSON (uses generator tokens)
   2. --evaluate-only: load saved JSON, score with RAGAS (uses evaluator tokens)
 
-This lets you generate with Groq (free) and evaluate with Bedrock (no rate limit).
 
 Usage:
     python run_eval.py                                    # All-in-one (generate + evaluate)
@@ -25,7 +24,7 @@ import pandas as pd
 from config.settings import EVAL_RESULTS_DIR
 
 
-# Proposal thresholds (from CLAUDE.md)
+# Proposal thresholds 
 THRESHOLDS: dict[str, tuple[str, float]] = {
     "faithfulness":     ("RAGAS Faithfulness",           0.8),
     "answer_relevancy": ("RAGAS Answer Relevancy",       0.7),
@@ -67,9 +66,11 @@ def _print_threshold_table(ragas_df: pd.DataFrame | None, pubmedqa_df: pd.DataFr
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run HealthInformer evaluations")
-    parser.add_argument("--model", type=str, default="groq", choices=["groq", "bedrock"],
+    parser.add_argument("--model", type=str, default="groq",
+                        choices=["groq", "bedrock", "bedrock-llama"],
                         help="LLM backend for answer generation (default: groq)")
-    parser.add_argument("--evaluator", type=str, default="bedrock", choices=["groq", "bedrock"],
+    parser.add_argument("--evaluator", type=str, default="bedrock",
+                        choices=["groq", "bedrock"],
                         help="LLM backend for RAGAS evaluation (default: bedrock)")
     parser.add_argument("--top-k", type=int, default=4,
                         help="Number of chunks to retrieve per question (default: 4)")

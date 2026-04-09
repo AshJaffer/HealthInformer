@@ -23,7 +23,7 @@ def _create_llm(model: str) -> BaseLLM:
     """Instantiate the requested LLM backend.
 
     Args:
-        model: "groq" or "bedrock".
+        model: "groq", "bedrock", or "bedrock-llama".
 
     Returns:
         A BaseLLM instance.
@@ -32,8 +32,11 @@ def _create_llm(model: str) -> BaseLLM:
         return GroqLLM()
     elif model == "bedrock":
         return BedrockLLM()
+    elif model == "bedrock-llama":
+        from config.settings import BEDROCK_LLAMA_MODEL_ID
+        return BedrockLLM(model_id=BEDROCK_LLAMA_MODEL_ID)
     else:
-        raise ValueError(f"Unknown model: {model!r}. Use 'groq' or 'bedrock'.")
+        raise ValueError(f"Unknown model: {model!r}. Use 'groq', 'bedrock', or 'bedrock-llama'.")
 
 
 class RAGChain:
@@ -52,20 +55,25 @@ class RAGChain:
         """
         self.top_k = top_k
 
-        # Build the LLM first so we can share it with the retriever as
-        # the HyDE rewriter. Sharing one client avoids constructing a
-        # second backend (e.g. Groq) for query rewriting when the user
-        # has picked Bedrock for generation — important when one of the
-        # backends is rate-limited or has stale credentials.
+        # Build the generator LLM.
         llm = _create_llm(model)
-        self.generator = Generator(llm=llm)
+        self.generator = Generator(llm=llm, model_name=model)
 
-        # Shared embedder and store for the retriever; rewriter=llm
-        # enables HyDE using the same backend as generation.
+        # HyDE rewriter: for bedrock-llama, use Bedrock Haiku for HyDE
+        # instead of Llama. Llama's HyDE abstracts embed poorly in
+        # PubMedBERT space (~65% off-topic retrieval), while Claude's
+        # HyDE abstracts retrieve well. This keeps retrieval quality
+        # identical across backends so the comparison isolates only
+        # the generation step.
+        if model == "bedrock-llama":
+            rewriter = BedrockLLM()  # defaults to Haiku
+        else:
+            rewriter = llm
+
         embedder = Embedder()
         store = VectorStore()
         self.retriever = Retriever(
-            embedder=embedder, store=store, rewriter=llm,
+            embedder=embedder, store=store, rewriter=rewriter,
         )
 
         self.model_name = model

@@ -46,6 +46,7 @@ GROQ_MAX_TOKENS: int = 1024
 GROQ_TEMPERATURE: float = 0.3
 
 BEDROCK_MODEL_ID: str = "us.anthropic.claude-3-5-haiku-20241022-v1:0"
+BEDROCK_LLAMA_MODEL_ID: str = "us.meta.llama3-3-70b-instruct-v1:0"
 BEDROCK_MAX_TOKENS: int = 1024
 BEDROCK_TEMPERATURE: float = 0.3
 AWS_REGION: str = os.getenv("AWS_REGION", "us-east-1")

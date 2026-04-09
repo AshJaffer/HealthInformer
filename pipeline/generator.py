@@ -44,16 +44,35 @@ def _build_context_block(chunks: list[dict[str, Any]]) -> str:
     return "\n\n---\n\n".join(parts)
 
 
+# Llama 3.3 over-interprets the "say so honestly" clause in the system
+# prompt and refuses to answer ~65% of questions even when the retrieved
+# context contains relevant (if imperfect) information.  This supplement
+# nudges it to synthesise from what is available without removing the
+# honest-uncertainty clause that works well for Claude.
+_LLAMA_SYNTHESIS_SUPPLEMENT = (
+    "\n\nIMPORTANT: The context passages above were retrieved from a "
+    "medical research corpus and are likely relevant to the question. "
+    "Even if the passages do not perfectly match the question, extract "
+    "and synthesize whatever relevant information they contain. Only "
+    "say the context is insufficient if truly none of the passages "
+    "relate to the topic at all. Partial answers with citations are "
+    "far more helpful than refusals."
+)
+
+
 class Generator:
     """Builds a prompt from context and query, calls the LLM."""
 
-    def __init__(self, llm: BaseLLM) -> None:
+    def __init__(self, llm: BaseLLM, model_name: str = "") -> None:
         """Initialize with an LLM backend.
 
         Args:
             llm: Any BaseLLM implementation (GroqLLM, BedrockLLM, etc.).
+            model_name: Backend name (e.g. "bedrock-llama") used to
+                select model-specific prompt adjustments.
         """
         self.llm = llm
+        self.model_name = model_name
         self.system_prompt = _load_prompt("system_prompt.txt")
         self.citation_prompt = _load_prompt("citation_prompt.txt")
 
@@ -81,12 +100,17 @@ class Generator:
         if demographic_context:
             demo_section = f"\n\n{demographic_context}\n"
 
+        # Llama-specific synthesis encouragement (see _LLAMA_SYNTHESIS_SUPPLEMENT)
+        llama_extra = ""
+        if "llama" in self.model_name.lower():
+            llama_extra = _LLAMA_SYNTHESIS_SUPPLEMENT
+
         user_prompt = (
             f"{self.citation_prompt}\n\n"
             f"## Retrieved Context\n\n"
             f"{context_block}\n\n"
             f"## Question\n\n"
-            f"{query}{demo_section}\n\n"
+            f"{query}{demo_section}{llama_extra}\n\n"
             f"## Your Answer\n\n"
             f"Provide a clear, well-cited answer following the instructions above. "
             f"End with a Sources list and then this disclaimer on its own line:\n\n"

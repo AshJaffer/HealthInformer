@@ -118,7 +118,11 @@ def _make_llm(model: str) -> BaseLLM:
     elif model == "bedrock":
         from llm.bedrock_client import BedrockLLM
         return BedrockLLM()
-    raise ValueError(f"Unknown model: {model!r}. Use 'groq' or 'bedrock'.")
+    elif model == "bedrock-llama":
+        from config.settings import BEDROCK_LLAMA_MODEL_ID
+        from llm.bedrock_client import BedrockLLM
+        return BedrockLLM(model_id=BEDROCK_LLAMA_MODEL_ID)
+    raise ValueError(f"Unknown model: {model!r}. Use 'groq', 'bedrock', or 'bedrock-llama'.")
 
 
 def run_pubmedqa_benchmark(
@@ -204,7 +208,8 @@ def run_pubmedqa_benchmark(
     # ── Save results ────────────────────────────────────────────────────
     df = pd.DataFrame(rows)
     EVAL_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    output_path = EVAL_RESULTS_DIR / f"pubmedqa_{model}.csv"
+    file_name = {"bedrock-llama": "llama"}.get(model, model)
+    output_path = EVAL_RESULTS_DIR / f"pubmedqa_{file_name}.csv"
     df.to_csv(output_path, index=False)
     print(f"\nResults saved to {output_path}")
 

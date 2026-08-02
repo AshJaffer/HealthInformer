@@ -4,6 +4,10 @@ A Retrieval-Augmented Generation (RAG) system that answers general health questi
 
 Capstone project for the University of Michigan MADS program (SIADS 699).
 
+**[Full Report](docs/HealthInformer_Report.pdf)** · **[Poster](docs/HealthInformer_Poster.pdf)**
+
+![HealthInformer Poster](docs/poster.png)
+
 ## Tech Stack
 
 | Layer | Tool |
